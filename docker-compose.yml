@@ -1,0 +1,43 @@
+services:
+  db:
+    image: postgres:15
+    container_name: chat-db
+    environment:
+      POSTGRES_USER: chatuser
+      POSTGRES_PASSWORD: chatpass
+      POSTGRES_DB: chatdb
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: always
+
+  backend:
+    build: ./backend
+    container_name: chat-backend
+    environment:
+      DATABASE_URL: postgresql://chatuser:chatpass@db:5432/chatdb
+      PORT: 3000
+    depends_on:
+      - db
+    volumes:
+      - uploads:/app/uploads
+    ports:
+      - "3000:3000"
+    restart: always
+
+  nginx:
+    image: nginx:alpine
+    container_name: chat-nginx
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - uploads:/usr/share/nginx/html/uploads:ro
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: always
+
+volumes:
+  pgdata:
+  uploads:

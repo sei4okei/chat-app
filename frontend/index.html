@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat App</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="login-container" class="container">
+        <h2>Login / Register</h2>
+        <input type="text" id="username" placeholder="Username">
+        <input type="password" id="password" placeholder="Password">
+        <input type="text" id="nickname" placeholder="Nickname (optional)">
+        <button id="login-btn">Login</button>
+        <button id="register-btn">Register</button>
+        <div id="error-msg" style="color:red"></div>
+    </div>
+
+    <div id="chat-container" class="container" style="display:none">
+        <div class="sidebar">
+            <div class="user-info">
+                <img id="user-avatar" src="" alt="avatar" width="40" height="40">
+                <span id="user-nickname"></span>
+                <button id="edit-profile-btn">Edit</button>
+            </div>
+            <div class="tabs">
+                <button id="tab-general" class="active">General Chat</button>
+                <button id="tab-private">Private Chats</button>
+            </div>
+            <div id="chat-list" class="chat-list">
+                <!-- Динамически: список чатов -->
+            </div>
+        </div>
+        <div class="main-chat">
+            <div id="chat-header"></div>
+            <div id="messages" class="messages"></div>
+            <div class="message-input">
+                <input type="text" id="message-text" placeholder="Type a message...">
+                <input type="file" id="file-input" accept="image/*,video/*">
+                <button id="send-btn">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="edit-profile-modal" class="modal" style="display:none">
+        <div class="modal-content">
+            <h3>Edit Profile</h3>
+            <input type="text" id="edit-nickname" placeholder="Nickname">
+            <input type="file" id="edit-avatar" accept="image/*">
+            <button id="save-profile-btn">Save</button>
+            <button id="close-modal-btn">Close</button>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

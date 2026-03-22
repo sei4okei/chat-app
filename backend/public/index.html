@@ -290,7 +290,25 @@
         const editProfileBtn = document.getElementById('editProfileBtn');
         const currentUsernameSpan = document.getElementById('currentUsername');
 
-        // Инициализация: регистрация пользователя (просто вводим имя)
+        // Функция для подписки на сообщения конкретного чата
+        let currentChatListener = null;
+        function subscribeToChat(chatId) {
+            // Отписываемся от старого чата, если был
+            if (currentChatListener) {
+                socket.off(`chat_${currentChatListener}`, currentChatListener);
+                currentChatListener = null;
+            }
+            if (!chatId) return;
+            const listener = (message) => {
+                if (currentChatId == message.chat_id) {
+                    appendMessage(message);
+                }
+            };
+            socket.on(`chat_${chatId}`, listener);
+            currentChatListener = listener;
+        }
+
+        // Инициализация: регистрация пользователя
         async function initUser() {
             let username = localStorage.getItem('chat_username');
             if (!username) {
@@ -312,13 +330,10 @@
             // Подключить Socket.IO
             socket = io();
             socket.on('connect', () => {
+                console.log('Socket connected');
                 socket.emit('join', currentUser.id);
             });
-            socket.on(`chat_${currentChatId}`, (message) => {
-                if (currentChatId == message.chat_id) {
-                    appendMessage(message);
-                }
-            });
+            // По умолчанию не подписываемся на чат, подписка произойдет при открытии чата
         }
 
         async function loadUsers() {
@@ -356,7 +371,6 @@
                 div.className = 'chat-item';
                 let chatName = chat.name;
                 if (!chatName && chat.participants) {
-                    // Для личных чатов показываем имя собеседника
                     const other = chat.participants.find(p => p.id !== currentUser.id);
                     chatName = other ? other.username : 'Без названия';
                 }
@@ -405,14 +419,14 @@
                 }
                 currentChatNameSpan.textContent = chatName || 'Чат';
             }
+            // Подписываемся на сообщения этого чата
+            subscribeToChat(chatId);
             // Загрузить сообщения
             const res = await fetch(`/api/chats/${chatId}/messages`);
             const messages = await res.json();
             messagesDiv.innerHTML = '';
             messages.forEach(msg => appendMessage(msg));
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
-            // Переподписаться на сокет (можно оставить как есть, но уведомления приходят на все чаты)
-            // socket.off(`chat_${chatId}`); но мы обрабатываем в общем
         }
 
         function appendMessage(msg) {

@@ -6,6 +6,7 @@ const multer = require('multer');
 const path = require('path');
 const cors = require('cors');
 const fs = require('fs');
+const onlineUsers = new Set(); // хранит id пользователей, которые онлайн
 
 const app = express();
 const server = http.createServer(app);
@@ -89,12 +90,15 @@ const pool = new Pool({
 app.get('/api/users', async (req, res) => {
   try {
     const result = await pool.query('SELECT id, username, avatar FROM users ORDER BY id');
-    res.json(result.rows);
+    const users = result.rows.map(user => ({
+      ...user,
+      online: onlineUsers.has(user.id)
+    }));
+    res.json(users);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
-
 // Создать пользователя (регистрация)
 app.post('/api/users', async (req, res) => {
   const { username } = req.body;
@@ -198,7 +202,10 @@ io.on('connection', (socket) => {
 
   socket.on('join', (userId) => {
     socket.userId = userId;
-    console.log(`User ${userId} joined`);
+    onlineUsers.add(userId);
+    console.log(`User ${userId} joined, online: ${Array.from(onlineUsers)}`);
+    // Рассылаем всем, что этот пользователь онлайн
+    io.emit('user_online', userId);
   });
 
   socket.on('send_message', async (data) => {
@@ -220,10 +227,14 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
+    if (socket.userId) {
+      onlineUsers.delete(socket.userId);
+      console.log(`User ${socket.userId} disconnected, online: ${Array.from(onlineUsers)}`);
+      io.emit('user_offline', socket.userId);
+    }
     console.log('Client disconnected');
   });
 });
-
 // Для всех остальных запросов отдаем index.html (SPA)
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));

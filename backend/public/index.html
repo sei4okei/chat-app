@@ -69,6 +69,7 @@
             background: #f0f2f5;
         }
         .avatar {
+            position: relative;
             width: 40px;
             height: 40px;
             border-radius: 50%;
@@ -87,6 +88,22 @@
             width: 100%;
             height: 100%;
             object-fit: cover;
+        }
+        .status-dot {
+            position: absolute;
+            bottom: 2px;
+            right: 2px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            border: 2px solid white;
+            background-color: #ccc;
+        }
+        .status-dot.online {
+            background-color: #4caf50;
+        }
+        .status-dot.offline {
+            background-color: #f44336;
         }
         .user-info, .chat-info {
             flex: 1;
@@ -327,12 +344,78 @@
             // Загрузить пользователей и чаты
             await loadUsers();
             await loadChats();
+            renderChats();
             // Подключить Socket.IO
             socket = io();
             socket.on('connect', () => {
                 console.log('Socket connected');
                 socket.emit('join', currentUser.id);
             });
+socket.on('user_online', (userId) => {
+    // Обновляем статус в allUsers
+    const user = allUsers.find(u => u.id === userId);
+    if (user) {
+        user.online = true;
+    }
+    // Обновляем отображение в списке людей
+    const userElement = document.querySelector(`.user-item[data-user-id="${userId}"]`);
+    if (userElement) {
+        const statusDot = userElement.querySelector('.status-dot');
+        if (statusDot) {
+            statusDot.classList.remove('offline');
+            statusDot.classList.add('online');
+        }
+    }
+    // Обновляем в списке чатов (если это чат с этим пользователем)
+    document.querySelectorAll('.chat-item').forEach(chatItem => {
+        const chatId = chatItem.getAttribute('data-chat-id');
+        if (chatId) {
+            const chat = userChats.find(c => c.id == chatId);
+            if (chat && !chat.is_group && chat.participants && chat.participants.length === 2) {
+                const other = chat.participants.find(p => p.id !== currentUser.id);
+                if (other && other.id === userId) {
+                    const statusDot = chatItem.querySelector('.status-dot');
+                    if (statusDot) {
+                        statusDot.classList.remove('offline');
+                        statusDot.classList.add('online');
+                    }
+                }
+            }
+        }
+    });
+});
+
+socket.on('user_offline', (userId) => {
+    const user = allUsers.find(u => u.id === userId);
+    if (user) {
+        user.online = false;
+    }
+    const userElement = document.querySelector(`.user-item[data-user-id="${userId}"]`);
+    if (userElement) {
+        const statusDot = userElement.querySelector('.status-dot');
+        if (statusDot) {
+            statusDot.classList.remove('online');
+            statusDot.classList.add('offline');
+        }
+    }
+    // Обновляем в списке чатов
+    document.querySelectorAll('.chat-item').forEach(chatItem => {
+        const chatId = chatItem.getAttribute('data-chat-id');
+        if (chatId) {
+            const chat = userChats.find(c => c.id == chatId);
+            if (chat && !chat.is_group && chat.participants && chat.participants.length === 2) {
+                const other = chat.participants.find(p => p.id !== currentUser.id);
+                if (other && other.id === userId) {
+                    const statusDot = chatItem.querySelector('.status-dot');
+                    if (statusDot) {
+                        statusDot.classList.remove('online');
+                        statusDot.classList.add('offline');
+                    }
+                }
+            }
+        }
+    });
+});
             // По умолчанию не подписываемся на чат, подписка произойдет при открытии чата
         }
 
@@ -343,20 +426,23 @@
             renderUsers();
         }
 
-        function renderUsers() {
-            usersListDiv.innerHTML = '';
-            allUsers.forEach(user => {
-                const div = document.createElement('div');
-                div.className = 'user-item';
-                div.innerHTML = `
-                    <div class="avatar">${getAvatarHtml(user.avatar, user.username)}</div>
-                    <div class="user-info"><div class="username">${escapeHtml(user.username)}</div></div>
-                `;
-                div.onclick = () => openPrivateChat(user.id);
-                usersListDiv.appendChild(div);
-            });
-        }
-
+function renderUsers() {
+    usersListDiv.innerHTML = '';
+    allUsers.forEach(user => {
+        const div = document.createElement('div');
+        div.className = 'user-item';
+        div.setAttribute('data-user-id', user.id);
+        div.innerHTML = `
+            <div class="avatar">
+                ${getAvatarHtml(user.avatar, user.username)}
+                <div class="status-dot ${user.online ? 'online' : 'offline'}"></div>
+            </div>
+            <div class="user-info"><div class="username">${escapeHtml(user.username)}</div></div>
+        `;
+        div.onclick = () => openPrivateChat(user.id);
+        usersListDiv.appendChild(div);
+    });
+}
         async function loadChats() {
             const res = await fetch(`/api/users/${currentUser.id}/chats`);
             const chats = await res.json();
@@ -364,25 +450,31 @@
             renderChats();
         }
 
-        function renderChats() {
-            chatsListDiv.innerHTML = '';
-            userChats.forEach(chat => {
-                const div = document.createElement('div');
-                div.className = 'chat-item';
-                let chatName = chat.name;
-                if (!chatName && chat.participants) {
-                    const other = chat.participants.find(p => p.id !== currentUser.id);
-                    chatName = other ? other.username : 'Без названия';
-                }
-                div.innerHTML = `
-                    <div class="avatar">${getAvatarHtml(chat.participants?.[0]?.avatar, chatName)}</div>
-                    <div class="chat-info"><div class="chat-name">${escapeHtml(chatName)}</div></div>
-                `;
-                div.onclick = () => openChat(chat.id);
-                chatsListDiv.appendChild(div);
-            });
+function renderChats() {
+    chatsListDiv.innerHTML = '';
+    userChats.forEach(chat => {
+        const div = document.createElement('div');
+        div.className = 'chat-item';
+        let chatName = chat.name;
+        let otherUser = null;
+        if (!chatName && chat.participants) {
+            otherUser = chat.participants.find(p => p.id !== currentUser.id);
+            chatName = otherUser ? otherUser.username : 'Без названия';
         }
-
+        const avatarUrl = otherUser ? otherUser.avatar : null;
+        const onlineStatus = otherUser ? (allUsers.find(u => u.id === otherUser.id)?.online || false) : false;
+       div.setAttribute('data-chat-id', chat.id);        
+       div.innerHTML = `
+            <div class="avatar">
+                ${getAvatarHtml(avatarUrl, chatName)}
+                ${otherUser ? `<div class="status-dot ${onlineStatus ? 'online' : 'offline'}"></div>` : ''}
+            </div>
+            <div class="chat-info"><div class="chat-name">${escapeHtml(chatName)}</div></div>
+        `;
+        div.onclick = () => openChat(chat.id);
+        chatsListDiv.appendChild(div);
+    });
+}
         async function openPrivateChat(userId) {
             // Ищем существующий чат с этим пользователем
             const existing = userChats.find(chat => {

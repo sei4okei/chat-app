@@ -4,7 +4,7 @@ const { Server } = require('socket.io');
 const path = require('path');
 const cors = require('cors');
 const { initDb } = require('./db');
-const { router, setOnlineUsers } = require('./routes');
+const { router, setOnlineUsers, setIo } = require('./routes');
 const { setupSocket } = require('./socket');
 
 const app = express();
@@ -12,6 +12,7 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: "*", methods: ["GET", "POST"] }
 });
+setIo(io);
 
 app.use(cors());
 app.use(express.json());

@@ -17,7 +17,7 @@ socket.on('join', (userId) => {
       io.emit('user_online', userId);
     });
     socket.on('send_message', async (data) => {
-      const { chatId, userId, content, fileUrl } = data;
+      const { chatId, userId, content, fileUrl, tempId } = data;
       try {
         const result = await pool.query(
           `INSERT INTO messages (chat_id, user_id, content, file_url, read_at)
@@ -29,7 +29,8 @@ socket.on('join', (userId) => {
         const messageWithUser = {
           ...newMessage,
           username: userRes.rows[0].username,
-          avatar: userRes.rows[0].avatar
+          avatar: userRes.rows[0].avatar,
+tempId
         };
         io.to(`chat_${chatId}`).emit(`chat_${chatId}`, messageWithUser);
       } catch (err) {

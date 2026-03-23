@@ -6,6 +6,12 @@ const { pool } = require('./db');
 
 const router = express.Router();
 
+let io; // глобальная переменная для Socket.IO
+
+function setIo(socketIo) {
+  io = socketIo;
+}
+
 // Настройка multer для загрузки файлов
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
@@ -145,6 +151,10 @@ router.post('/api/chats/:chatId/read', async (req, res) => {
     const participants = await pool.query('SELECT user_id FROM chat_participants WHERE chat_id = $1', [chatId]);
     // Отдаём список участников, чтобы сокет-сервер разослал уведомления
     res.json({ success: true, participants: participants.rows.map(r => r.user_id) });
+// Уведомить всех участников чата о прочтении
+if (io) {
+  io.to(`chat_${chatId}`).emit(`chat_${chatId}_read`);
+}
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
@@ -155,5 +165,4 @@ router.post('/api/upload', upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
   res.json({ fileUrl: `/uploads/${req.file.filename}` });
 });
-
-module.exports = { router, setOnlineUsers };
+module.exports = { router, setOnlineUsers, setIo };

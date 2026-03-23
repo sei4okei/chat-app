@@ -8,11 +8,12 @@ class SocketManager {
             onChatRead: null
         };
     }
-joinChat(chatId) {
-    if (this.socket) {
-        this.socket.emit('join_chat', chatId);
+
+    joinChat(chatId) {
+        if (this.socket) {
+            this.socket.emit('join_chat', chatId);
+        }
     }
-}
 
     connect(userId, callbacks) {
         this.callbacks = callbacks;
@@ -22,12 +23,16 @@ joinChat(chatId) {
             this.socket.emit('join', userId);
         });
         this.socket.onAny((event, data) => {
+            // Сообщения (обычные)
             if (event.startsWith('chat_') && !event.endsWith('_read')) {
                 const chatId = parseInt(event.split('_')[1]);
                 if (this.callbacks.onMessage) this.callbacks.onMessage(chatId, data);
             }
+            // Событие прочтения
             if (event.endsWith('_read')) {
-                const chatId = parseInt(event.split('_')[0].split('_')[1]);
+                // event = "chat_123_read"
+                const parts = event.split('_');
+                const chatId = parseInt(parts[1]); // берём вторую часть
                 if (this.callbacks.onChatRead) this.callbacks.onChatRead(chatId);
             }
         });
@@ -39,9 +44,9 @@ joinChat(chatId) {
         });
     }
 
-    sendMessage(chatId, userId, content, fileUrl) {
+    sendMessage(chatId, userId, content, fileUrl, tempId) {
         if (!this.socket) return;
-        this.socket.emit('send_message', { chatId, userId, content: content || '', fileUrl: fileUrl || null });
+        this.socket.emit('send_message', { chatId, userId, content: content || '', fileUrl: fileUrl || null, tempId });
     }
 
     disconnect() {

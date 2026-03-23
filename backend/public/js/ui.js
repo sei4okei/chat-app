@@ -1,3 +1,23 @@
+// Вспомогательные функции
+function getAvatarHtml(avatarUrl, username) {
+    if (avatarUrl) {
+        return `<img src="${avatarUrl}" alt="Avatar" class="avatar-img">`;
+    } else {
+        const initial = username ? username.charAt(0).toUpperCase() : '?';
+        return `<div class="avatar-placeholder">${initial}</div>`;
+    }
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 const UI = {
     // DOM элементы
     usersList: document.getElementById('usersList'),
@@ -65,28 +85,43 @@ const UI = {
         });
     },
 
-    appendMessage(msg, currentUserId) {
-        const isOwn = msg.user_id === currentUserId;
-        const div = document.createElement('div');
-        div.className = `message ${isOwn ? 'own' : ''}`;
-        let content = '';
-        if (msg.content) content += `<div class="message-bubble">${escapeHtml(msg.content)}</div>`;
-        if (msg.file_url) {
-            const url = msg.file_url;
-            if (url.match(/\.(jpeg|jpg|gif|png|webp)$/i)) content += `<img class="message-media" src="${url}" alt="image" onclick="window.open('${url}')">`;
-            else if (url.match(/\.(mp4|webm|ogg)$/i)) content += `<video class="message-media" controls src="${url}"></video>`;
-            else content += `<a href="${url}" target="_blank">Файл</a>`;
-        }
-        let statusHtml = '';
-        if (isOwn) {
-            const isRead = msg.read_at !== null;
-            statusHtml = `<span class="message-status ${isRead ? 'status-read' : 'status-sent'}">${isRead ? '✓✓' : '✓'}</span>`;
-        }
-        div.innerHTML = content + `<div class="message-meta">${msg.username} • ${formatTime(msg.created_at)} ${statusHtml}</div>`;
-        this.messagesDiv.appendChild(div);
-        this.messagesDiv.scrollTop = this.messagesDiv.scrollHeight;
-    },
+appendMessage(msg, currentUserId) {
+    const isOwn = msg.user_id === currentUserId;
+    const div = document.createElement('div');
+    div.className = `message ${isOwn ? 'own' : ''}`;
+    if (msg.tempId) {
+        div.setAttribute('data-temp-id', msg.tempId);
+    }
+    if (msg.id) {
+        div.setAttribute('data-message-id', msg.id);
+    }
 
+    let content = '';
+    if (msg.content) {
+        content += `<div class="message-bubble">${escapeHtml(msg.content)}</div>`;
+    }
+    if (msg.file_url) {
+        const url = msg.file_url;
+        if (url.match(/\.(jpeg|jpg|gif|png|webp)$/i)) {
+            content += `<img class="message-media" src="${url}" alt="image" onclick="window.open('${url}')">`;
+        } else if (url.match(/\.(mp4|webm|ogg)$/i)) {
+            content += `<video class="message-media" controls src="${url}"></video>`;
+        } else {
+            content += `<a href="${url}" target="_blank">Файл</a>`;
+        }
+    }
+
+    let statusHtml = '';
+    if (isOwn) {
+        const isRead = msg.read_at !== null;
+        statusHtml = `<span class="message-status ${isRead ? 'status-read' : 'status-sent'}">${isRead ? '✓✓' : '✓'}</span>`;
+    }
+    const timeStr = msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '';
+    div.innerHTML = content + `<div class="message-meta">${escapeHtml(msg.username)} • ${timeStr} ${statusHtml}</div>`;
+
+    this.messagesDiv.appendChild(div);
+    this.messagesDiv.scrollTop = this.messagesDiv.scrollHeight;
+},
     clearMessages() {
         this.messagesDiv.innerHTML = '';
     },
@@ -97,11 +132,6 @@ const UI = {
             const dot = userEl.querySelector('.status-dot');
             if (dot) dot.className = `status-dot ${online ? 'online' : 'offline'}`;
         }
-        document.querySelectorAll('.chat-item').forEach(chatItem => {
-            const chatId = chatItem.getAttribute('data-chat-id');
-            // для обновления статуса в чатах нужно знать currentUser и allUsers
-            // эта логика будет в app.js, но для простоты пусть будет здесь
-        });
     },
 
     showProfileModal(username, avatar, onSave, onClose) {

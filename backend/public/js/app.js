@@ -5,6 +5,9 @@ let allUsers = [];
 let userChats = [];
 let socketManager = null;
 
+function generateTempId() {
+  return Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+}
 // Функции приложения
 async function loadUsers() {
     try {
@@ -73,9 +76,22 @@ async function openPrivateChat(userId) {
 async function sendMessage(content, fileUrl = null) {
     if (!currentChatId) return;
     if (!content && !fileUrl) return;
-    socketManager.sendMessage(currentChatId, currentUser.id, content, fileUrl);
+    const tempId = generateTempId();
+    // Локально добавить сообщение со статусом "отправлено" (одна галочка)
+    const pendingMessage = {
+        id: null,
+        tempId: tempId,
+        user_id: currentUser.id,
+        username: currentUser.username,
+        avatar: currentUser.avatar,
+        content: content || '',
+        file_url: fileUrl,
+        created_at: new Date().toISOString(),
+        read_at: null
+    };
+    UI.appendMessage(pendingMessage, currentUser.id, true); // true = локальное, временное
+    socketManager.sendMessage(currentChatId, currentUser.id, content, fileUrl, tempId);
 }
-
 async function handleFileUpload(file) {
     try {
         const data = await API.uploadFile(file);
@@ -101,18 +117,46 @@ async function init() {
         // Инициализация сокетов
         socketManager = new SocketManager();
         socketManager.connect(currentUser.id, {
-            onMessage: (chatId, message) => {
-                if (chatId === currentChatId) {
-                    UI.appendMessage(message, currentUser.id);
-                } else {
-                    // Увеличить счётчик непрочитанных
-                    const idx = userChats.findIndex(c => c.id === chatId);
-                    if (idx !== -1) {
-                        userChats[idx].unread_count = (userChats[idx].unread_count || 0) + 1;
-                        UI.renderChats(userChats, currentUser.id, allUsers, (id) => openChat(id));
-                    }
-                }
-            },
+
+onMessage: (chatId, message) => {
+    if (chatId === currentChatId) {
+        // Проверить, не является ли это эхом своего сообщения
+if (message.tempId) {
+    const existingMsg = document.querySelector(`.message[data-temp-id="${message.tempId}"]`);
+    if (existingMsg) {
+        // Обновляем статус внутри message-meta
+        const statusSpan = existingMsg.querySelector('.message-status');
+        if (statusSpan) {
+            if (message.read_at) {
+                statusSpan.className = 'message-status status-read';
+                statusSpan.innerHTML = '✓✓';
+            } else {
+                statusSpan.className = 'message-status status-sent';
+                statusSpan.innerHTML = '✓';
+            }
+        }
+        existingMsg.dataset.messageId = message.id;
+        return;
+    }
+}
+        // Иначе добавляем как новое сообщение (от других)
+        UI.appendMessage(message, currentUser.id);
+        // ⚡ Автоматически помечаем сообщение как прочитанное (если это не своё)
+        if (message.user_id !== currentUser.id) {
+            API.markChatRead(chatId, currentUser.id).then(() => {
+                // не ждём ответа, просто чтобы статус обновился у отправителя
+            });
+        }
+    } else {
+        // Обновить счётчик непрочитанных
+        const idx = userChats.findIndex(c => c.id === chatId);
+        if (idx !== -1) {
+            userChats[idx].unread_count = (userChats[idx].unread_count || 0) + 1;
+            UI.renderChats(userChats, currentUser.id, allUsers, (id) => openChat(id));
+        }
+    }
+},
+
             onUserOnline: (userId) => {
                 const user = allUsers.find(u => u.id === userId);
                 if (user) user.online = true;

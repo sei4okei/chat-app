@@ -3,6 +3,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { pool } = require('./db');
+const bcrypt = require('bcrypt');
 
 const router = express.Router();
 
@@ -41,18 +42,73 @@ router.get('/api/users', async (req, res) => {
   }
 });
 
-router.post('/api/users', async (req, res) => {
-  const { username } = req.body;
-  if (!username) return res.status(400).json({ error: 'Username required' });
+// Регистрация
+router.post('/api/register', async (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
   try {
+    const existing = await pool.query('SELECT id FROM users WHERE username = $1', [username]);
+    if (existing.rows.length > 0) {
+      return res.status(400).json({ error: 'Username already exists' });
+    }
+    const hash = await bcrypt.hash(password, 10);
     const result = await pool.query(
-      'INSERT INTO users (username) VALUES ($1) ON CONFLICT (username) DO UPDATE SET username = EXCLUDED.username RETURNING id, username, avatar',
-      [username]
+      'INSERT INTO users (username, password_hash) VALUES ($1, $2) RETURNING id, username, avatar',
+      [username, hash]
     );
+    req.session.userId = result.rows[0].id;
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Логин
+router.post('/api/login', async (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
+  try {
+    const result = await pool.query('SELECT id, username, avatar, password_hash FROM users WHERE username = $1', [username]);
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+    const user = result.rows[0];
+    const valid = await bcrypt.compare(password, user.password_hash);
+    if (!valid) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+    req.session.userId = user.id;
+    res.json({ id: user.id, username: user.username, avatar: user.avatar });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Проверка текущей сессии
+router.get('/api/me', async (req, res) => {
+  if (!req.session.userId) {
+    return res.status(401).json({ error: 'Not logged in' });
+  }
+  try {
+    const result = await pool.query('SELECT id, username, avatar FROM users WHERE id = $1', [req.session.userId]);
+    if (result.rows.length === 0) {
+      req.session.destroy();
+      return res.status(401).json({ error: 'User not found' });
+    }
     res.json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// Выход
+router.post('/api/logout', (req, res) => {
+  req.session.destroy(err => {
+    if (err) return res.status(500).json({ error: 'Logout failed' });
+    res.json({ success: true });
+  });
 });
 
 router.put('/api/users/:id', async (req, res) => {
@@ -65,6 +121,25 @@ router.put('/api/users/:id', async (req, res) => {
     );
     res.json(result.rows[0]);
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Смена пароля
+router.post('/api/users/:id/change-password', async (req, res) => {
+  const { id } = req.params;
+  const { oldPassword, newPassword } = req.body;
+  if (!oldPassword || !newPassword) return res.status(400).json({ error: 'Old and new password required' });
+  try {
+    const result = await pool.query('SELECT password_hash FROM users WHERE id = $1', [id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    const valid = await bcrypt.compare(oldPassword, result.rows[0].password_hash);
+    if (!valid) return res.status(401).json({ error: 'Invalid old password' });
+    const newHash = await bcrypt.hash(newPassword, 10);
+    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHash, id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ error: err.message });
   }
 });

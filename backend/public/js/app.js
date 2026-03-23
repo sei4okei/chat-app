@@ -6,9 +6,38 @@ let userChats = [];
 let socketManager = null;
 
 function generateTempId() {
-  return Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+    return Date.now() + '-' + Math.random().toString(36).substr(2, 9);
 }
-// Функции приложения
+
+async function checkAuth() {
+    try {
+        const user = await API.getMe();
+        if (user) {
+            currentUser = user;
+            UI.setCurrentUsername(currentUser.username);
+            await loadUsers();
+            await loadChats();
+            initSocket();
+            showApp();
+            return true;
+        }
+    } catch (e) {
+        console.log('Not authenticated');
+    }
+    showAuth();
+    return false;
+}
+
+function showApp() {
+    document.getElementById('authModal').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+}
+
+function showAuth() {
+    document.getElementById('authModal').style.display = 'flex';
+    document.getElementById('app').style.display = 'none';
+}
+
 async function loadUsers() {
     try {
         const users = await API.getUsers();
@@ -43,11 +72,10 @@ async function openChat(chatId) {
         UI.setCurrentChatName(chatName);
     }
     UI.clearMessages();
-socketManager.joinChat(chatId);
+    socketManager.joinChat(chatId);
     const messages = await API.getChatMessages(chatId);
     messages.forEach(msg => UI.appendMessage(msg, currentUser.id));
     await API.markChatRead(chatId, currentUser.id);
-    // Обновляем счётчик в списке чатов
     const idx = userChats.findIndex(c => c.id === chatId);
     if (idx !== -1) {
         userChats[idx].unread_count = 0;
@@ -77,7 +105,6 @@ async function sendMessage(content, fileUrl = null) {
     if (!currentChatId) return;
     if (!content && !fileUrl) return;
     const tempId = generateTempId();
-    // Локально добавить сообщение со статусом "отправлено" (одна галочка)
     const pendingMessage = {
         id: null,
         tempId: tempId,
@@ -89,9 +116,10 @@ async function sendMessage(content, fileUrl = null) {
         created_at: new Date().toISOString(),
         read_at: null
     };
-    UI.appendMessage(pendingMessage, currentUser.id, true); // true = локальное, временное
+    UI.appendMessage(pendingMessage, currentUser.id);
     socketManager.sendMessage(currentChatId, currentUser.id, content, fileUrl, tempId);
 }
+
 async function handleFileUpload(file) {
     try {
         const data = await API.uploadFile(file);
@@ -101,136 +129,115 @@ async function handleFileUpload(file) {
     }
 }
 
-async function init() {
-    let username = localStorage.getItem('chat_username');
-    if (!username) {
-        username = prompt('Введите ваше имя:', 'User' + Math.floor(Math.random()*1000));
-        if (!username) username = 'Anonymous';
-        localStorage.setItem('chat_username', username);
-    }
-    try {
-        currentUser = await API.createUser(username);
-        UI.setCurrentUsername(currentUser.username);
-        await loadUsers();
-        await loadChats();
-
-        // Инициализация сокетов
-        socketManager = new SocketManager();
-        socketManager.connect(currentUser.id, {
-
-onMessage: (chatId, message) => {
-    if (chatId === currentChatId) {
-        // Проверить, не является ли это эхом своего сообщения
-if (message.tempId) {
-    const existingMsg = document.querySelector(`.message[data-temp-id="${message.tempId}"]`);
-    if (existingMsg) {
-        // Обновляем статус внутри message-meta
-        const statusSpan = existingMsg.querySelector('.message-status');
-        if (statusSpan) {
-            if (message.read_at) {
-                statusSpan.className = 'message-status status-read';
-                statusSpan.innerHTML = '✓✓';
-            } else {
-                statusSpan.className = 'message-status status-sent';
-                statusSpan.innerHTML = '✓';
-            }
-        }
-        existingMsg.dataset.messageId = message.id;
-        return;
-    }
-}
-        // Иначе добавляем как новое сообщение (от других)
-        UI.appendMessage(message, currentUser.id);
-        // ⚡ Автоматически помечаем сообщение как прочитанное (если это не своё)
-        if (message.user_id !== currentUser.id) {
-            API.markChatRead(chatId, currentUser.id).then(() => {
-                // не ждём ответа, просто чтобы статус обновился у отправителя
-            });
-        }
-    } else {
-        // Обновить счётчик непрочитанных
-        const idx = userChats.findIndex(c => c.id === chatId);
-        if (idx !== -1) {
-            userChats[idx].unread_count = (userChats[idx].unread_count || 0) + 1;
-            UI.renderChats(userChats, currentUser.id, allUsers, (id) => openChat(id));
-        }
-    }
-},
-
-            onUserOnline: (userId) => {
-                const user = allUsers.find(u => u.id === userId);
-                if (user) user.online = true;
-                UI.updateUserStatusDot(userId, true);
-                // Также обновить статус в списке чатов
-                UI.renderChats(userChats, currentUser.id, allUsers, (id) => openChat(id));
-            },
-            onUserOffline: (userId) => {
-                const user = allUsers.find(u => u.id === userId);
-                if (user) user.online = false;
-                UI.updateUserStatusDot(userId, false);
-                UI.renderChats(userChats, currentUser.id, allUsers, (id) => openChat(id));
-            },
-            onChatRead: (chatId) => {
-                if (chatId === currentChatId) {
-                    // Обновить галочки у всех своих сообщений в этом чате
-                    document.querySelectorAll('.message.own').forEach(msgDiv => {
-                        const statusSpan = msgDiv.querySelector('.message-status');
+function initSocket() {
+    socketManager = new SocketManager();
+    socketManager.connect(currentUser.id, {
+        onMessage: (chatId, message) => {
+            if (chatId === currentChatId) {
+                if (message.tempId) {
+                    const existingMsg = document.querySelector(`.message[data-temp-id="${message.tempId}"]`);
+                    if (existingMsg) {
+                        const statusSpan = existingMsg.querySelector('.message-status');
                         if (statusSpan) {
+                            statusSpan.className = 'message-status status-sent';
+                            statusSpan.innerHTML = '✓';
+                        }
+                        existingMsg.dataset.messageId = message.id;
+                        if (message.read_at) {
                             statusSpan.className = 'message-status status-read';
                             statusSpan.innerHTML = '✓✓';
                         }
-                    });
+                        return;
+                    }
                 }
+                UI.appendMessage(message, currentUser.id);
+                if (message.user_id !== currentUser.id) {
+                    API.markChatRead(chatId, currentUser.id);
+                }
+            } else {
                 const idx = userChats.findIndex(c => c.id === chatId);
                 if (idx !== -1) {
-                    userChats[idx].unread_count = 0;
+                    userChats[idx].unread_count = (userChats[idx].unread_count || 0) + 1;
                     UI.renderChats(userChats, currentUser.id, allUsers, (id) => openChat(id));
                 }
             }
-        });
-
-        // Навешиваем обработчики UI
-        UI.sendBtn.onclick = () => {
-            const text = UI.messageInput.value.trim();
-            if (text) {
-                sendMessage(text);
-                UI.messageInput.value = '';
-            }
-        };
-        UI.messageInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                UI.sendBtn.click();
-            }
-        });
-        UI.fileInput.onchange = async (e) => {
-            const file = e.target.files[0];
-            if (file) await handleFileUpload(file);
-            UI.fileInput.value = '';
-        };
-        UI.createChatBtn.onclick = () => {
-            UI.showCreateChatModal(allUsers, async () => {
-                const name = document.getElementById('chatName').value;
-                const selected = Array.from(document.getElementById('chatParticipants').selectedOptions).map(opt => parseInt(opt.value));
-                if (selected.length < 1) {
-                    alert('Выберите хотя бы одного участника');
-                    return;
-                }
-                const participants = [currentUser.id, ...selected];
-                await API.createChat({
-                    name: name || null,
-                    participants,
-                    isGroup: participants.length > 2
+        },
+        onUserOnline: (userId) => {
+            const user = allUsers.find(u => u.id === userId);
+            if (user) user.online = true;
+            UI.updateUserStatusDot(userId, true);
+            UI.renderChats(userChats, currentUser.id, allUsers, (id) => openChat(id));
+        },
+        onUserOffline: (userId) => {
+            const user = allUsers.find(u => u.id === userId);
+            if (user) user.online = false;
+            UI.updateUserStatusDot(userId, false);
+            UI.renderChats(userChats, currentUser.id, allUsers, (id) => openChat(id));
+        },
+        onChatRead: (chatId) => {
+            if (chatId === currentChatId) {
+                document.querySelectorAll('.message.own').forEach(msgDiv => {
+                    const statusSpan = msgDiv.querySelector('.message-status');
+                    if (statusSpan) {
+                        statusSpan.className = 'message-status status-read';
+                        statusSpan.innerHTML = '✓✓';
+                    }
                 });
-                await loadChats();
-            }, () => {});
-        };
-        UI.editProfileBtn.onclick = () => {
-            UI.showProfileModal(currentUser.username, currentUser.avatar,
-                async () => {
-                    const newUsername = document.getElementById('profileUsername').value.trim();
-                    const newAvatar = document.getElementById('profileAvatar').value.trim();
-                    if (!newUsername) return;
+            }
+            const idx = userChats.findIndex(c => c.id === chatId);
+            if (idx !== -1) {
+                userChats[idx].unread_count = 0;
+                UI.renderChats(userChats, currentUser.id, allUsers, (id) => openChat(id));
+            }
+        }
+    });
+}
+
+function initUI() {
+    UI.sendBtn.onclick = () => {
+        const text = UI.messageInput.value.trim();
+        if (text) {
+            sendMessage(text);
+            UI.messageInput.value = '';
+        }
+    };
+    UI.messageInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            UI.sendBtn.click();
+        }
+    });
+    UI.fileInput.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (file) await handleFileUpload(file);
+        UI.fileInput.value = '';
+    };
+    UI.createChatBtn.onclick = () => {
+        UI.showCreateChatModal(allUsers, async () => {
+            const name = document.getElementById('chatName').value;
+            const selected = Array.from(document.getElementById('chatParticipants').selectedOptions).map(opt => parseInt(opt.value));
+            if (selected.length < 1) {
+                alert('Выберите хотя бы одного участника');
+                return;
+            }
+            const participants = [currentUser.id, ...selected];
+            await API.createChat({
+                name: name || null,
+                participants,
+                isGroup: participants.length > 2
+            });
+            await loadChats();
+        }, () => {});
+    };
+    UI.editProfileBtn.onclick = () => {
+        UI.showProfileModal(currentUser.username, currentUser.avatar,
+            async () => {
+                const newUsername = document.getElementById('profileUsername').value.trim();
+                const newAvatar = document.getElementById('profileAvatar').value.trim();
+                const newPassword = document.getElementById('profileNewPassword').value.trim();
+                const oldPassword = document.getElementById('profileOldPassword').value.trim();
+
+                if (newUsername) {
                     const updated = await API.updateUser(currentUser.id, {
                         username: newUsername,
                         avatar: newAvatar || null
@@ -240,26 +247,82 @@ if (message.tempId) {
                     localStorage.setItem('chat_username', updated.username);
                     await loadUsers();
                     await loadChats();
-                },
-                () => {}
-            );
+                }
+
+                if (newPassword && oldPassword) {
+                    try {
+                        await API.changePassword(currentUser.id, oldPassword, newPassword);
+                        alert('Пароль изменён');
+                    } catch (err) {
+                        alert('Ошибка смены пароля: ' + err.message);
+                    }
+                }
+            },
+            () => {}
+        );
+    };
+    document.querySelectorAll('.tab').forEach(tab => {
+        tab.onclick = () => {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            const tabName = tab.dataset.tab;
+            UI.usersList.style.display = tabName === 'users' ? 'block' : 'none';
+            UI.chatsList.style.display = tabName === 'chats' ? 'block' : 'none';
         };
-        // Табы
-        document.querySelectorAll('.tab').forEach(tab => {
-            tab.onclick = () => {
-                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-                tab.classList.add('active');
-                const tabName = tab.dataset.tab;
-                UI.usersList.style.display = tabName === 'users' ? 'block' : 'none';
-                UI.chatsList.style.display = tabName === 'chats' ? 'block' : 'none';
-            };
-        });
-        UI.usersList.style.display = 'block';
-        UI.chatsList.style.display = 'none';
-    } catch (err) {
-        console.error('Init error:', err);
-    }
+    });
+    UI.usersList.style.display = 'block';
+    UI.chatsList.style.display = 'none';
 }
 
-// Запуск после загрузки страницы
-window.addEventListener('DOMContentLoaded', init);
+// Авторизация
+function initAuth() {
+    const authModal = document.getElementById('authModal');
+    const authTitle = document.getElementById('authTitle');
+    const authSubmit = document.getElementById('authSubmit');
+    const authToggle = document.getElementById('authToggle');
+    const authUsername = document.getElementById('authUsername');
+    const authPassword = document.getElementById('authPassword');
+    const authError = document.getElementById('authError');
+
+    let isLogin = true;
+
+    authToggle.onclick = () => {
+        isLogin = !isLogin;
+        authTitle.innerText = isLogin ? 'Вход' : 'Регистрация';
+        authSubmit.innerText = isLogin ? 'Войти' : 'Зарегистрироваться';
+        authToggle.innerText = isLogin ? 'Нет аккаунта? Зарегистрироваться' : 'Уже есть аккаунт? Войти';
+        authError.innerText = '';
+    };
+
+    authSubmit.onclick = async () => {
+        const username = authUsername.value.trim();
+        const password = authPassword.value.trim();
+        if (!username || !password) {
+            authError.innerText = 'Заполните оба поля';
+            return;
+        }
+        try {
+            let user;
+            if (isLogin) {
+                user = await API.login(username, password);
+            } else {
+                user = await API.register(username, password);
+            }
+            currentUser = user;
+            UI.setCurrentUsername(currentUser.username);
+            await loadUsers();
+            await loadChats();
+            initSocket();
+            showApp();
+        } catch (err) {
+            authError.innerText = err.message || 'Ошибка';
+        }
+    };
+}
+
+// Запуск
+window.addEventListener('DOMContentLoaded', () => {
+    initUI();
+    initAuth();
+    checkAuth();
+});

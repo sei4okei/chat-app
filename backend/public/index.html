@@ -47,6 +47,17 @@
     </style>
 </head>
 <body>
+<div id="authModal" class="modal" style="display: flex;">
+    <div class="modal-content">
+        <h3 id="authTitle">Вход</h3>
+        <input type="text" id="authUsername" placeholder="Никнейм" autocomplete="username">
+        <input type="password" id="authPassword" placeholder="Пароль" autocomplete="current-password">
+        <button id="authSubmit">Войти</button>
+        <button id="authToggle">Нет аккаунта? Зарегистрироваться</button>
+        <div id="authError" style="color: red; margin-top: 10px;"></div>
+    </div>
+</div>
+<div id="app" style="display: none;">
     <div class="sidebar">
         <div class="sidebar-header">
             Чат
@@ -77,9 +88,9 @@
         </div>
     </div>
 
-    <div id="profileModal" class="modal"><div class="modal-content"><h3>Редактировать профиль</h3><input type="text" id="profileUsername" placeholder="Новый никнейм"><input type="text" id="profileAvatar" placeholder="URL аватара"><button id="saveProfileBtn">Сохранить</button><button id="closeProfileBtn">Отмена</button></div></div>
+<div id="profileModal" class="modal"><div class="modal-content"><h3>Редактировать профиль</h3><input type="text" id="profileUsername" placeholder="Новый никнейм"><input type="text" id="profileAvatar" placeholder="URL аватара"><hr><input type="password" id="profileOldPassword" placeholder="Старый пароль"><input type="password" id="profileNewPassword" placeholder="Новый пароль"><button id="saveProfileBtn">Сохранить</button><button id="closeProfileBtn">Отмена</button></div></div>
     <div id="createChatModal" class="modal"><div class="modal-content"><h3>Новый чат</h3><input type="text" id="chatName" placeholder="Название чата (опционально)"><select id="chatParticipants" multiple size="5"></select><button id="confirmCreateChatBtn">Создать</button><button id="closeCreateChatBtn">Отмена</button></div></div>
-
+</div>
     <script src="/socket.io/socket.io.js"></script>
     <script src="/js/config.js"></script>
     <script src="/js/utils.js"></script>

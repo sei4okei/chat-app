@@ -137,6 +137,8 @@ appendMessage(msg, currentUserId) {
     showProfileModal(username, avatar, onSave, onClose) {
         document.getElementById('profileUsername').value = username;
         document.getElementById('profileAvatar').value = avatar || '';
+        document.getElementById('profileOldPassword').value = '';
+        document.getElementById('profileNewPassword').value = '';
         this.profileModal.style.display = 'flex';
         const saveBtn = document.getElementById('saveProfileBtn');
         const closeBtn = document.getElementById('closeProfileBtn');

@@ -129,6 +129,21 @@ async function handleFileUpload(file) {
     }
 }
 
+// Обработка нового пользователя
+function handleNewUser(user) {
+    // Добавляем нового пользователя в список allUsers, если его там нет
+    if (!allUsers.find(u => u.id === user.id)) {
+        allUsers.push(user);
+        UI.renderUsers(allUsers, currentUser.id, (userId) => openPrivateChat(userId));
+    }
+}
+
+// Обработка нового чата
+async function handleNewChat(data) {
+    // Перезагружаем список чатов для текущего пользователя
+    await loadChats();
+}
+
 function initSocket() {
     socketManager = new SocketManager();
     socketManager.connect(currentUser.id, {
@@ -189,6 +204,12 @@ function initSocket() {
                 userChats[idx].unread_count = 0;
                 UI.renderChats(userChats, currentUser.id, allUsers, (id) => openChat(id));
             }
+        },
+        onNewUser: (user) => {
+            handleNewUser(user);
+        },
+        onNewChat: (data) => {
+            handleNewChat(data);
         }
     });
 }

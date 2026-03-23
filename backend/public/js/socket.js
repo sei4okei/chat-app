@@ -5,7 +5,9 @@ class SocketManager {
             onMessage: null,
             onUserOnline: null,
             onUserOffline: null,
-            onChatRead: null
+            onChatRead: null,
+            onNewUser: null,
+            onNewChat: null
         };
     }
 
@@ -30,9 +32,8 @@ class SocketManager {
             }
             // Событие прочтения
             if (event.endsWith('_read')) {
-                // event = "chat_123_read"
                 const parts = event.split('_');
-                const chatId = parseInt(parts[1]); // берём вторую часть
+                const chatId = parseInt(parts[1]);
                 if (this.callbacks.onChatRead) this.callbacks.onChatRead(chatId);
             }
         });
@@ -41,6 +42,12 @@ class SocketManager {
         });
         this.socket.on('user_offline', (userId) => {
             if (this.callbacks.onUserOffline) this.callbacks.onUserOffline(userId);
+        });
+        this.socket.on('new_user', (user) => {
+            if (this.callbacks.onNewUser) this.callbacks.onNewUser(user);
+        });
+        this.socket.on('new_chat', (data) => {
+            if (this.callbacks.onNewChat) this.callbacks.onNewChat(data);
         });
     }
 

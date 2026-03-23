@@ -293,6 +293,31 @@ function initUI() {
     });
     UI.usersList.style.display = 'block';
     UI.chatsList.style.display = 'none';
+    // Мобильное меню
+    const menuToggle = document.getElementById('menuToggle');
+    const sidebar = document.getElementById('sidebar');
+    if (menuToggle && sidebar) {
+        menuToggle.onclick = () => {
+            sidebar.classList.toggle('open');
+        };
+        // Закрывать сайдбар при клике вне его (на десктопе не нужно, но на мобильных удобно)
+        document.addEventListener('click', (e) => {
+            if (window.innerWidth <= 768) {
+                if (!sidebar.contains(e.target) && !menuToggle.contains(e.target)) {
+                    sidebar.classList.remove('open');
+                }
+            }
+        });
+    }
+    // Для мобильных: при фокусе на поле ввода прокручиваем к нему
+    const messageInput = UI.messageInput;
+    if (messageInput) {
+        messageInput.addEventListener('focus', () => {
+            setTimeout(() => {
+                messageInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 300);
+        });
+    }
 }
 
 // Авторизация
